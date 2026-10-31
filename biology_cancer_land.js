@@ -8765,6 +8765,7 @@ if (elements.cancer) { elements.cancer.category = "land"; }
             if (pixel.cancerStageStart === undefined) {
                 pixel.cancerStageStart = pixelTicks;
                 pixel.cancerStage = 1;
+                pixel.cancerStageName = fastCancerStageNames[0];
                 pixel.color = fastCancerColors[0];
             }
 
