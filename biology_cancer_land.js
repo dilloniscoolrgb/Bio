@@ -8688,16 +8688,15 @@ elements.antidote.category = "medicine"
 // Move the base-game cancer element into the Land category.
 if (elements.cancer) { elements.cancer.category = "land"; }
 
-// Cancer progression: cancer cells can slowly travel with blood and impair nearby brain tissue.
+// Cancer progression: slow bloodstream spread and gradual loss of brain function.
 (function() {
     if (!elements.cancer) return;
 
+    // Keep the original cancer behavior, then add slow movement through actual blood pixels.
     var originalCancerTick = elements.cancer.tick;
-
     elements.cancer.tick = function(pixel) {
         if (originalCancerTick) originalCancerTick(pixel);
 
-        // Move slowly through blood rather than spreading instantly.
         if (pixelTicks % 12 === 0 && Math.random() < 0.35) {
             var bloodTargets = [];
             for (var i = 0; i < squareCoords.length; i++) {
@@ -8705,16 +8704,17 @@ if (elements.cancer) { elements.cancer.category = "land"; }
                 var y = pixel.y + squareCoords[i][1];
                 if (isEmpty(x, y, true)) continue;
                 var neighbor = pixelMap[x][y];
-                if (neighbor && (neighbor.element === "blood" || neighbor.element === "blood_vessel")) {
+                // Do not swap into the stationary blood-vessel wall.
+                if (neighbor && neighbor.element === "blood") {
                     bloodTargets.push(neighbor);
                 }
             }
-            if (bloodTargets.length && typeof swapPixels === "function") {
+            if (bloodTargets.length) {
                 swapPixels(pixel, choose(bloodTargets));
             }
         }
 
-        // Repeated contact gradually damages brain tissue.
+        // Contact with cancer slowly damages adjacent brain tissue.
         if (pixelTicks % 80 === 0) {
             for (var j = 0; j < squareCoords.length; j++) {
                 var bx = pixel.x + squareCoords[j][0];
@@ -8723,11 +8723,12 @@ if (elements.cancer) { elements.cancer.category = "land"; }
                 var brainPixel = pixelMap[bx][by];
                 if (brainPixel && (brainPixel.element === "brain" || brainPixel.element === "hypothalamus")) {
                     brainPixel.cancerDamage = (brainPixel.cancerDamage || 0) + 1;
-                    brainPixel.nutrition = Math.max(0, (brainPixel.nutrition || 0) - 0.5);
-                    brainPixel.oxygen = Math.max(0, (brainPixel.oxygen || 0) - 0.5);
+                    brainPixel.nutrition = Math.max(0, (brainPixel.nutrition || 0) - 1);
+                    brainPixel.oxygen = Math.max(0, (brainPixel.oxygen || 0) - 1);
 
                     if (brainPixel.cancerDamage >= 20) {
                         brainPixel.darkcharge = true;
+                        brainPixel.cancerEarlyDamage = true;
                     }
                     if (brainPixel.cancerDamage >= 45) {
                         brainPixel.feel = false;
@@ -8741,4 +8742,17 @@ if (elements.cancer) { elements.cancer.category = "land"; }
             }
         }
     };
+
+    // Enforce the loss of brain signaling after the impairment thresholds are reached.
+    ["brain", "hypothalamus"].forEach(function(name) {
+        if (!elements[name] || !elements[name].tick) return;
+        var originalBrainTick = elements[name].tick;
+        elements[name].tick = function(pixel) {
+            if (pixel.cancerDamage >= 45) pixel.feel = false;
+            if (pixel.cancerDamage >= 80) pixel.charge = 0;
+            originalBrainTick(pixel);
+            if (pixel.cancerDamage >= 45) pixel.feel = false;
+            if (pixel.cancerDamage >= 80) pixel.charge = 0;
+        };
+    });
 })();
