@@ -8687,3 +8687,58 @@ elements.antidote.category = "medicine"
 
 // Move the base-game cancer element into the Land category.
 if (elements.cancer) { elements.cancer.category = "land"; }
+
+// Cancer progression: cancer cells can slowly travel with blood and impair nearby brain tissue.
+(function() {
+    if (!elements.cancer) return;
+
+    var originalCancerTick = elements.cancer.tick;
+
+    elements.cancer.tick = function(pixel) {
+        if (originalCancerTick) originalCancerTick(pixel);
+
+        // Move slowly through blood rather than spreading instantly.
+        if (pixelTicks % 12 === 0 && Math.random() < 0.35) {
+            var bloodTargets = [];
+            for (var i = 0; i < squareCoords.length; i++) {
+                var x = pixel.x + squareCoords[i][0];
+                var y = pixel.y + squareCoords[i][1];
+                if (isEmpty(x, y, true)) continue;
+                var neighbor = pixelMap[x][y];
+                if (neighbor && (neighbor.element === "blood" || neighbor.element === "blood_vessel")) {
+                    bloodTargets.push(neighbor);
+                }
+            }
+            if (bloodTargets.length && typeof swapPixels === "function") {
+                swapPixels(pixel, choose(bloodTargets));
+            }
+        }
+
+        // Repeated contact gradually damages brain tissue.
+        if (pixelTicks % 80 === 0) {
+            for (var j = 0; j < squareCoords.length; j++) {
+                var bx = pixel.x + squareCoords[j][0];
+                var by = pixel.y + squareCoords[j][1];
+                if (isEmpty(bx, by, true)) continue;
+                var brainPixel = pixelMap[bx][by];
+                if (brainPixel && (brainPixel.element === "brain" || brainPixel.element === "hypothalamus")) {
+                    brainPixel.cancerDamage = (brainPixel.cancerDamage || 0) + 1;
+                    brainPixel.nutrition = Math.max(0, (brainPixel.nutrition || 0) - 0.5);
+                    brainPixel.oxygen = Math.max(0, (brainPixel.oxygen || 0) - 0.5);
+
+                    if (brainPixel.cancerDamage >= 20) {
+                        brainPixel.darkcharge = true;
+                    }
+                    if (brainPixel.cancerDamage >= 45) {
+                        brainPixel.feel = false;
+                        brainPixel.cancerImpaired = true;
+                    }
+                    if (brainPixel.cancerDamage >= 80) {
+                        brainPixel.charge = 0;
+                        brainPixel.cancerSeverelyImpaired = true;
+                    }
+                }
+            }
+        }
+    };
+})();
