@@ -8743,6 +8743,64 @@ if (elements.cancer) { elements.cancer.category = "land"; }
         }
     };
 
+    // Fast Cancer: runs the enhanced cancer tick five times per game tick.
+    // At the default 30 TPS, each stage lasts 1,800 ticks (60 seconds).
+    var enhancedCancerTick = elements.cancer.tick;
+    var fastCancerColors = ["#b8d94a", "#d6a32e", "#e87828", "#c93434", "#6f163d"];
+    var fastCancerStageNames = [
+        "Stage 1 - Early",
+        "Stage 2 - Growing",
+        "Stage 3 - Aggressive",
+        "Stage 4 - Advanced",
+        "Stage 5 - Critical"
+    ];
+
+    elements.fast_cancer = Object.assign({}, elements.cancer, {
+        name: "Fast Cancer",
+        color: fastCancerColors[0],
+        category: "land",
+        hidden: false,
+        desc: "Cancer that progresses five times faster, advancing one stage every minute.",
+        tick: function(pixel) {
+            if (pixel.cancerStageStart === undefined) {
+                pixel.cancerStageStart = pixelTicks;
+                pixel.cancerStage = 1;
+                pixel.color = fastCancerColors[0];
+            }
+
+            var elapsedTicks = Math.max(0, pixelTicks - pixel.cancerStageStart);
+            var nextStage = Math.min(5, 1 + Math.floor(elapsedTicks / 1800));
+
+            if (nextStage !== pixel.cancerStage) {
+                pixel.cancerStage = nextStage;
+                pixel.color = fastCancerColors[nextStage - 1];
+                pixel.cancerStageName = fastCancerStageNames[nextStage - 1];
+            }
+
+            // Run the normal enhanced cancer logic five times for faster growth/spread.
+            for (var fastStep = 0; fastStep < 5; fastStep++) {
+                if (pixel.del || pixelMap[pixel.x][pixel.y] !== pixel) break;
+                enhancedCancerTick(pixel);
+            }
+
+            // Later stages cause more rapid damage when touching brain tissue.
+            if (pixel.cancerStage >= 3 && pixelTicks % 80 === 0) {
+                for (var k = 0; k < squareCoords.length; k++) {
+                    var tx = pixel.x + squareCoords[k][0];
+                    var ty = pixel.y + squareCoords[k][1];
+                    if (isEmpty(tx, ty, true)) continue;
+                    var target = pixelMap[tx][ty];
+                    if (target && (target.element === "brain" || target.element === "hypothalamus")) {
+                        target.cancerDamage = (target.cancerDamage || 0) + (pixel.cancerStage - 1);
+                    }
+                }
+            }
+        },
+        hoverStat: function(pixel) {
+            return pixel.cancerStageName || "Stage 1 - Early";
+        }
+    });
+
     // Enforce the loss of brain signaling after the impairment thresholds are reached.
     ["brain", "hypothalamus"].forEach(function(name) {
         if (!elements[name] || !elements[name].tick) return;
